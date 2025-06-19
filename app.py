@@ -26,14 +26,18 @@ def scrape_fivethirtyeight_elo(league):
     soup = BeautifulSoup(response.text, "html.parser")
     tables = soup.find_all("table")
 
-    for table in tables:
+    for idx, table in enumerate(tables):
         try:
-            df = pd.read_html(str(table))[0]
-        except:
+            dfs = pd.read_html(str(table))
+            for df in dfs:
+                # Ensure the DataFrame isn't empty and has the necessary columns
+                if "Team" in df.columns and any("Elo" in col for col in df.columns):
+                    elo_col = next(col for col in df.columns if "Elo" in col)
+                    return df[["Team", elo_col]].rename(columns={"Team": "team", elo_col: "elo"})
+        except Exception as e:
+            # Optionally log the error
+            print(f"Table {idx} skipped due to error: {e}")
             continue
-        if "Team" in df.columns and any("Elo" in col for col in df.columns):
-            elo_col = next(col for col in df.columns if "Elo" in col)
-            return df[["Team", elo_col]].rename(columns={"Team": "team", elo_col: "elo"})
 
     st.error(f"Elo table not found for league '{league}'")
     return pd.DataFrame()
