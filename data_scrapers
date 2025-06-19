@@ -1,0 +1,91 @@
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
+
+def scrape_nba_past_games(season_year=2023):
+    url = f"https://www.basketball-reference.com/leagues/NBA_{season_year}_games.html"
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, "html.parser")
+    table = soup.find("table", {"id": "schedule"})
+    df = pd.read_html(str(table))[0]
+    df = df[["Date", "Visitor/Neutral", "PTS", "Home/Neutral", "PTS.1"]]
+    df.columns = ["date", "visitor_team", "visitor_pts", "home_team", "home_pts"]
+    df = df.dropna(subset=["visitor_pts", "home_pts"])
+    df["visitor_pts"] = df["visitor_pts"].astype(int)
+    df["home_pts"] = df["home_pts"].astype(int)
+    return df
+
+def scrape_nfl_past_games(season_year=2023):
+    url = f"https://www.pro-football-reference.com/years/{season_year}/games.htm"
+    r = requests.get(url)
+    df = pd.read_html(r.text)[0]
+    df = df[["Week", "Date", "Winner/tie", "PtsW", "Loser/tie", "PtsL"]]
+    df = df.dropna(subset=["PtsW", "PtsL"])
+    df.columns = ["week", "date", "winner", "winner_pts", "loser", "loser_pts"]
+    df["winner_pts"] = df["winner_pts"].astype(int)
+    df["loser_pts"] = df["loser_pts"].astype(int)
+    df = df.rename(columns={
+        "winner": "team1",
+        "winner_pts": "score1",
+        "loser": "team2",
+        "loser_pts": "score2"
+    })
+    return df[["date", "team1", "score1", "team2", "score2"]]
+
+def scrape_mlb_past_games(season_year=2023):
+    url = f"https://www.baseball-reference.com/leagues/MLB/{season_year}-schedule.shtml"
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, "html.parser")
+    tables = soup.find_all("table", {"class": "sortable stats_table"})
+    dfs = []
+    for table in tables:
+        df = pd.read_html(str(table))[0]
+        if {"Date", "Visitor", "Visitor R", "Home", "Home R"}.issubset(df.columns):
+            df = df[["Date", "Visitor", "Visitor R", "Home", "Home R"]]
+            df.columns = ["date", "visitor_team", "visitor_pts", "home_team", "home_pts"]
+            dfs.append(df)
+    full_df = pd.concat(dfs, ignore_index=True)
+    full_df = full_df.dropna(subset=["visitor_pts", "home_pts"])
+    full_df["visitor_pts"] = full_df["visitor_pts"].astype(int)
+    full_df["home_pts"] = full_df["home_pts"].astype(int)
+    return full_df
+
+def scrape_nhl_past_games(season_year=2023):
+    url = f"https://www.hockey-reference.com/leagues/NHL_{season_year}_games.html"
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, "html.parser")
+    table = soup.find("table", {"id": "games"})
+    df = pd.read_html(str(table))[0]
+    df = df[["Date", "Visitor", "Visitor Goals", "Home", "Home Goals"]]
+    df.columns = ["date", "visitor_team", "visitor_pts", "home_team", "home_pts"]
+    df = df.dropna(subset=["visitor_pts", "home_pts"])
+    df["visitor_pts"] = df["visitor_pts"].astype(int)
+    df["home_pts"] = df["home_pts"].astype(int)
+    return df
+
+def scrape_wnba_past_games(season_year=2023):
+    url = f"https://www.basketball-reference.com/wnba/years/{season_year}_games.html"
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, "html.parser")
+    table = soup.find("table", {"id": "schedule"})
+    df = pd.read_html(str(table))[0]
+    df = df[["Date", "Visitor/Neutral", "PTS", "Home/Neutral", "PTS.1"]]
+    df.columns = ["date", "visitor_team", "visitor_pts", "home_team", "home_pts"]
+    df = df.dropna(subset=["visitor_pts", "home_pts"])
+    df["visitor_pts"] = df["visitor_pts"].astype(int)
+    df["home_pts"] = df["home_pts"].astype(int)
+    return df
+
+def scrape_league_multiple_seasons(league_scraper_func, start_year=2021, end_year=2023):
+    dfs = []
+    for year in range(start_year, end_year + 1):
+        try:
+            df = league_scraper_func(season_year=year)
+            df['season'] = year
+            dfs.append(df)
+        except Exception as e:
+            print(f"Failed to scrape {league_scraper_func.__name__} {year}: {e}")
+    if dfs:
+        return pd.concat(dfs, ignore_index=True)
+    else:
+        return pd.DataFrame()
