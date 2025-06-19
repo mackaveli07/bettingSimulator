@@ -12,12 +12,26 @@ st.title("🕹️ Betting Odds Simulator")
 # League selector
 league = st.selectbox("Select League", ["nba", "nfl", "mlb", "nhl", "wnba"])
 
+# Load real historical Elo data from FiveThirtyEight
+@st.cache_data(show_spinner=False)
+def load_elo_data(league):
+    urls = {
+        "nba": "https://projects.fivethirtyeight.com/nba-model/nba_elo.csv",
+        "nfl": "https://projects.fivethirtyeight.com/nfl-api/nfl_elo.csv",
+        "mlb": "https://projects.fivethirtyeight.com/mlb-api/mlb_elo.csv",
+        "nhl": "https://projects.fivethirtyeight.com/nhl-api/nhl_elo.csv",
+        "wnba": "https://projects.fivethirtyeight.com/wnba-model/wnba_elo.csv"
+    }
+    df = pd.read_csv(urls[league])
+    return df
+
 # Auto-fetch matchups using cache
 @st.cache_data(show_spinner=False)
 def get_matchups(league):
     return fetch_live_matchups_from_espn(league)
 
 matchups = get_matchups(league)
+elo_df = load_elo_data(league)
 
 if not matchups:
     st.warning("No matchups found for this league.")
@@ -26,18 +40,27 @@ else:
     st.subheader("Fetched Matchups")
     st.dataframe(df)
 
-    # Train dummy models
-    dummy_df = pd.DataFrame({
-        'elo1_pre': np.random.randint(1400, 1700, size=100),
-        'elo2_pre': np.random.randint(1400, 1700, size=100),
-        'score1': np.random.randint(80, 130, size=100),
-        'score2': np.random.randint(80, 130, size=100)
-    })
-    model_team = train_team_score_model(dummy_df, 'score1', 'elo1_pre', 'elo2_pre')
-    model_opp = train_team_score_model(dummy_df, 'score2', 'elo2_pre', 'elo1_pre')
+    # Extract latest Elo per team
+    latest_elo = elo_df.sort_values("date").groupby("team1")["elo1_pre"].last().reset_index()
+    latest_elo.columns = ["team", "elo"]
+
+    # Assign Elo ratings to matchups
+    df = df.merge(latest_elo, left_on="team", right_on="team", how="left")
+    df = df.rename(columns={"elo": "team_elo"})
+    df = df.merge(latest_elo, left_on="opponent", right_on="team", how="left", suffixes=("", "_opp"))
+    df = df.rename(columns={"elo": "opp_elo"})
+
+    # Drop extra team columns
+    df = df.drop(columns=["team_opp"])
+
+    # Train models using real historical data
+    model_team = train_team_score_model(elo_df, 'score1', 'elo1_pre', 'elo2_pre')
+    model_opp = train_team_score_model(elo_df, 'score2', 'elo2_pre', 'elo1_pre')
 
     results = []
     for _, row in df.iterrows():
+        if pd.isna(row['team_elo']) or pd.isna(row['opp_elo']):
+            continue
         res = simulate_game(row['team_elo'], row['opp_elo'], model_team, model_opp)
         res.update({
             "team": row["team"],
@@ -48,6 +71,9 @@ else:
         results.append(res)
 
     results_df = pd.DataFrame(results)
+
+    st.subheader("Simulation Results")
+    st.dataframe(results_df)
 
     for _, row in results_df.iterrows():
         cols = st.columns([1, 2, 1])
