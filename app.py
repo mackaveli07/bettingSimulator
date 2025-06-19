@@ -73,6 +73,7 @@ else:
         ax.set_xlim(0, 1)
         ax.set_title("Win Probability")
         st.pyplot(fig)
+        plt.close(fig)
 
         # Mock live odds comparison
         live_spread = row['spread_mean'] + random.uniform(-5, 5)
