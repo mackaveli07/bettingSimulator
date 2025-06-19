@@ -22,7 +22,18 @@ def load_elo_data(league):
         "nhl": "https://projects.fivethirtyeight.com/nhl-api/nhl_elo.csv",
         "wnba": "https://projects.fivethirtyeight.com/wnba-model/wnba_elo.csv"
     }
-    df = pd.read_csv(urls[league])
+    url = urls.get(league)
+    if not url:
+        st.error(f"No Elo data URL configured for league {league}")
+        return pd.DataFrame()
+
+    try:
+        # Read CSV with python engine to handle irregular lines
+        df = pd.read_csv(url, engine="python", on_bad_lines='skip')
+    except Exception as e:
+        st.error(f"Failed to load Elo data: {e}")
+        return pd.DataFrame()
+
     return df
 
 # Auto-fetch matchups using cache
